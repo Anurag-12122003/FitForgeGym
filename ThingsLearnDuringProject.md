@@ -1,0 +1,2 @@
+## When we switch postgress Db to mySql Db, Problem Faces?
+MySQL mein native string arrays (String[]) support nahi hote, isliye instructions aur commonMistakes ko structured relations ya JSON field (Json) ke roop mein handle karenge.

@@ -1,0 +1,408 @@
+datasource db {
+  provider = "mysql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// -------------------------------------------------------------
+// ENUMS
+// -------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum FitnessLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum MuscleRole {
+  PRIMARY
+  SECONDARY
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+// -------------------------------------------------------------
+// 1. AUTHENTICATION & USER PROFILE
+// -------------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String    @default("")
+  role         Role      @default(USER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profile         Profile?
+  routines        Routine[]
+  dietPlans       DietPlan[]
+  workoutSessions WorkoutSession[]
+  nutritionLogs   NutritionLog[]
+  progressRecords ProgressRecord[]
+  exercises       Exercise[] @relation("UserExercises")
+
+  @@index([email])
+}
+
+model Profile {
+  id           String        @id @default(uuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gender       Gender?
+  age          Int?
+  heightCm     Float?
+  weightKg     Float?
+  fitnessLevel FitnessLevel  @default(BEGINNER)
+  primaryGoal  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// -------------------------------------------------------------
+// 2. EXERCISE & MUSCLE SYSTEM (CATALOG)
+// -------------------------------------------------------------
+
+model MuscleGroup {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  muscles     Muscle[]
+  createdAt   DateTime @default(now())
+}
+
+model Muscle {
+  id            String           @id @default(uuid())
+  name          String           @unique
+  slug          String           @unique
+  muscleGroupId String
+  muscleGroup   MuscleGroup      @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+  exercises     ExerciseMuscle[]
+  createdAt     DateTime         @default(now())
+}
+
+model Equipment {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  exercises Exercise[]
+  createdAt DateTime   @default(now())
+}
+
+model Exercise {
+  id             String           @id @default(uuid())
+  name           String           @unique
+  slug           String           @unique
+  description    String?          @db.Text
+  difficulty     FitnessLevel     @default(BEGINNER)
+  equipmentId    String?
+  equipment      Equipment?       @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  videoUrl       String?
+  imageUrl       String?
+  instructions   Json?            // MySQL stores string array as JSON
+  commonMistakes Json?            // MySQL stores string array as JSON
+  defaultSets    Int              @default(3)
+  repsMin        Int              @default(8)
+  repsMax        Int              @default(12)
+  restSeconds    Int              @default(90)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Custom exercise ownership
+  userId         String?
+  user           User?            @relation("UserExercises", fields: [userId], references: [id], onDelete: Cascade)
+
+  muscles          ExerciseMuscle[]
+  workoutExercises WorkoutExercise[]
+  routineExercises RoutineExercise[]
+  trackedSets      WorkoutSet[]
+
+  @@index([slug])
+}
+
+model ExerciseMuscle {
+  id         String     @id @default(uuid())
+  exerciseId String
+  muscleId   String
+  role       MuscleRole @default(PRIMARY)
+
+  exercise   Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  muscle     Muscle     @relation(fields: [muscleId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, muscleId])
+}
+
+// -------------------------------------------------------------
+// 3. WORKOUT PLANS (GLOBAL TEMPLATES)
+// -------------------------------------------------------------
+
+model WorkoutPlan {
+  id          String        @id @default(uuid())
+  title       String
+  slug        String        @unique
+  goal        String
+  level       FitnessLevel  @default(BEGINNER)
+  daysPerWeek Int           @default(4)
+  description String?       @db.Text
+  isTemplate  Boolean       @default(true)
+  days        WorkoutDay[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model WorkoutDay {
+  id            String            @id @default(uuid())
+  workoutPlanId String
+  workoutPlan   WorkoutPlan       @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
+  dayNumber     Int
+  name          String
+  isRestDay     Boolean           @default(false)
+  exercises     WorkoutExercise[]
+}
+
+model WorkoutExercise {
+  id           String      @id @default(uuid())
+  workoutDayId String
+  workoutDay   WorkoutDay  @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  order        Int         @default(1)
+  sets         Int         @default(3)
+  repsMin      Int         @default(8)
+  repsMax      Int         @default(12)
+  restSeconds  Int         @default(90)
+}
+
+// -------------------------------------------------------------
+// 4. CUSTOM USER ROUTINES
+// -------------------------------------------------------------
+
+model Routine {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  goal        String?
+  isActive    Boolean      @default(true)
+  days        RoutineDay[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model RoutineDay {
+  id          String            @id @default(uuid())
+  routineId   String
+  routine     Routine           @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  dayOfWeek   DayOfWeek
+  name        String
+  isRestDay   Boolean           @default(false)
+  exercises   RoutineExercise[]
+
+  @@unique([routineId, dayOfWeek])
+}
+
+model RoutineExercise {
+  id           String     @id @default(uuid())
+  routineDayId String
+  routineDay   RoutineDay @relation(fields: [routineDayId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  order        Int        @default(1)
+  sets         Int        @default(3)
+  repsMin      Int        @default(8)
+  repsMax      Int        @default(12)
+  restSeconds  Int        @default(90)
+}
+
+// -------------------------------------------------------------
+// 5. WORKOUT TRACKING & HISTORY
+// -------------------------------------------------------------
+
+model WorkoutSession {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routineId       String?
+  name            String
+  startedAt       DateTime     @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+  notes           String?      @db.Text
+  sets            WorkoutSet[]
+  createdAt       DateTime     @default(now())
+
+  @@index([userId, startedAt])
+}
+
+model WorkoutSet {
+  id               String         @id @default(uuid())
+  workoutSessionId String
+  workoutSession   WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exerciseId       String
+  exercise         Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  setNumber        Int
+  weightKg         Float
+  reps             Int
+  isCompleted      Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+
+  @@index([exerciseId, createdAt])
+}
+
+// -------------------------------------------------------------
+// 6. FOOD CATALOG (GLOBAL/ADMIN DATA)
+// -------------------------------------------------------------
+
+model Food {
+  id            String      @id @default(uuid())
+  name          String      @unique
+  slug          String      @unique
+  servingAmount Float       @default(100)
+  servingUnit   String      @default("g")
+  calories      Float
+  protein       Float
+  carbs         Float
+  fat           Float
+  fiber         Float       @default(0)
+  imageUrl      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  mealFoods     MealFood[]
+  logFoods      NutritionLogItem[]
+
+  @@index([slug])
+}
+
+// -------------------------------------------------------------
+// 7. USER-OWNED DIET PLANS & MEALS
+// -------------------------------------------------------------
+
+model DietPlan {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  goal           String?
+  targetCalories Float
+  targetProtein  Float
+  targetCarbs    Float
+  targetFat      Float
+  isActive       Boolean   @default(true)
+  meals          Meal[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Meal {
+  id         String     @id @default(uuid())
+  dietPlanId String
+  dietPlan   DietPlan   @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+  name       String
+  type       MealType   @default(BREAKFAST)
+  order      Int        @default(1)
+  foods      MealFood[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model MealFood {
+  id             String   @id @default(uuid())
+  mealId         String
+  meal           Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  foodId         String
+  food           Food     @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  quantityAmount Float    @default(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([mealId])
+}
+
+// -------------------------------------------------------------
+// 8. DAILY NUTRITION LOGGING
+// -------------------------------------------------------------
+
+model NutritionLog {
+  id            String             @id @default(uuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime           @db.Date
+  totalCalories Float              @default(0)
+  totalProtein  Float              @default(0)
+  totalCarbs    Float              @default(0)
+  totalFat      Float              @default(0)
+  items         NutritionLogItem[]
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model NutritionLogItem {
+  id             String       @id @default(uuid())
+  nutritionLogId String
+  nutritionLog   NutritionLog @relation(fields: [nutritionLogId], references: [id], onDelete: Cascade)
+  foodId         String
+  food           Food         @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  mealType       MealType     @default(BREAKFAST)
+  quantityAmount Float
+  calculatedCals Float
+  calculatedProt Float
+  calculatedCarb Float
+  calculatedFat  Float
+  createdAt      DateTime     @default(now())
+}
+
+// -------------------------------------------------------------
+// 9. PROGRESS & BODY METRICS
+// -------------------------------------------------------------
+
+model ProgressRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime @db.Date
+  weightKg    Float
+  bodyFatPct  Float?
+  chestCm     Float?
+  waistCm     Float?
+  armsCm      Float?
+  thighsCm    Float?
+  shouldersCm Float?
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
