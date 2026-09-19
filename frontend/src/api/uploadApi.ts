@@ -61,6 +61,7 @@ export const uploadApi = {
     defaultSets?: number;
     repsMin?: number;
     repsMax?: number;
+    targetWeightKg?:number;
     restSeconds?: number;
   }) => {
     const formData = new FormData();
@@ -143,9 +144,15 @@ export const uploadApi = {
         String(data.restSeconds)
       );
     }
+    if (data.targetWeightKg !== undefined) {
+      formData.append(
+        'targetWeightKg',
+        String(data.targetWeightKg)
+      );
+    }
 
     const res = await apiClient.post(
-      '/assets/user/exercises',
+      '/upload/user/exercises',
       formData,
       {
         headers: {

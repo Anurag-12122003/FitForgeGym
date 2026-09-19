@@ -6,6 +6,35 @@ import { Role, FitnessLevel, MuscleRole } from '../../generated/prisma/client.js
 import { z } from 'zod';
 
 const router = Router();
+// Helper to calculate calories based on user weight and workout duration
+function calculatePersonalizedCalories(
+    userWeightKg: number,
+    sets: number,
+    repsMin: number,
+    repsMax: number,
+    restSeconds: number,
+    difficulty: FitnessLevel
+): number {
+    const avgReps = (repsMin + repsMax) / 2;
+    const totalReps = sets * avgReps;
+
+    // Maan lete hain ek rep karne mein average 3 seconds lagte hain
+    const activeTimeSeconds = totalReps * 3;
+    // Total rest time (sets - 1 baar rest hoga)
+    const totalRestSeconds = Math.max(0, sets - 1) * restSeconds;
+
+    const totalDurationMinutes = (activeTimeSeconds + totalRestSeconds) / 60;
+
+    // Difficulty ke mutabiq MET (Intensity factor)
+    let met = 3.5; // Beginner / Moderate
+    if (difficulty === 'INTERMEDIATE') met = 4.5;
+    if (difficulty === 'ADVANCED') met = 6.0;
+
+    // Calories Formula: Calories = MET * Weight (kg) * Time (hours)
+    const caloriesBurned = met * userWeightKg * (totalDurationMinutes / 60);
+
+    return Math.max(5, Math.round(caloriesBurned)); // Minimum 5 kcal toh hoga hi
+}
 
 const createExerciseSchema = z.object({
     name: z.string().min(2),
@@ -18,6 +47,7 @@ const createExerciseSchema = z.object({
     repsMin: z.number().int().default(8),
     repsMax: z.number().int().default(12),
     restSeconds: z.number().int().default(90),
+    targetWeightKg: z.number().optional(),
     imageUrl: z.string().url().optional(),
     instructions: z.array(z.string()).optional().default([]),
     commonMistakes: z.array(z.string()).optional().default([]),
@@ -38,24 +68,48 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 });
 
 // GET: Single exercise detail with breakdown
-router.get('/:slug', async (req: Request<{ slug: string }>, res: Response): Promise<void> => {
-    const exercise = await prisma.exercise.findUnique({
+router.get('/:slug', authenticate, async (req: Request<{ slug: string }>, res: Response): Promise<void> => {
+    try {
+        const userId = req.user.id; // Auth middleware se mili user ID
 
-        where: { slug: req.params.slug },
-        include: {
-            equipment: true,
-            muscles: {
-                include: { muscle: true },
+        // User ka profile se weight nikal lo
+        const profile = await prisma.profile.findUnique({
+            where: { userId },
+            select: { weightKg: true } // Maan lijiye weight field kg mein hai
+        });
+
+        // Agar user ka weight na mile, toh ek default weight (jaise 70kg) maan lo
+        const userWeight = profile?.weightKg || 70;
+
+        const exercise = await prisma.exercise.findUnique({
+            where: { slug: req.params.slug },
+            include: {
+                equipment: true,
+                muscles: { include: { muscle: true } },
             },
-        },
-    });
+        });
 
-    if (!exercise) {
-        res.status(404).json({ message: 'Exercise not found' });
-        return;
+        if (!exercise) {
+            res.status(404).json({ message: 'Exercise not found' });
+            return;
+        }
+        // Calories calculate karein
+        const calories = calculatePersonalizedCalories(
+            userWeight,
+            exercise.defaultSets,
+            exercise.repsMin,
+            exercise.repsMax,
+            exercise.restSeconds,
+            exercise.difficulty
+        );
+
+        res.json({
+            ...exercise,
+            caloriesBurnEstimate: `${calories} kcal`,
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message || 'Server error' });
     }
-
-    res.json(exercise);
 });
 
 // POST: Admin create exercise with muscle bindings
@@ -74,10 +128,17 @@ router.post(
                     slug,
                     description: data.description ?? null,
                     difficulty: data.difficulty,
-                    equipmentId: data.equipmentId ?? null,
+                    ...(data.equipmentId
+                        ? {
+                            equipment: {
+                                connect: { id: data.equipmentId },
+                            },
+                        }
+                        : {}),
                     defaultSets: data.defaultSets,
                     repsMin: data.repsMin,
                     repsMax: data.repsMax,
+                    targetWeightKg: data.targetWeightKg,
                     restSeconds: data.restSeconds,
                     imageUrl: data.imageUrl ?? null,
                     instructions: data.instructions,

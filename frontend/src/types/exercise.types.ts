@@ -1,4 +1,4 @@
-export type MuscleGroup = 
+export type MuscleGroup =
   | 'All'
   | 'Chest'
   | 'Back'
@@ -10,21 +10,61 @@ export type MuscleGroup =
   | 'Abs'
   | 'Calves';
 
-export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
+export type Difficulty =
+  | 'BEGINNER'
+  | 'INTERMEDIATE'
+  | 'ADVANCED';
+
+export type MuscleRole = 'PRIMARY' | 'SECONDARY';
+
+export interface Muscle {
+  id: string;
+  name: string;
+  slug: string;
+  muscleGroupId: string;
+  createdAt: string;
+}
+
+export interface ExerciseMuscle {
+  id: string;
+  exerciseId: string;
+  muscleId: string;
+  role: MuscleRole;
+  muscle: Muscle;
+}
+
+export interface Equipment {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 
 export interface Exercise {
   id: string;
   name: string;
   slug: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: string[];
-  equipment: string;
+  description: string | null;
+
   difficulty: Difficulty;
-  defaultSets: number | string;
-  defaultReps: string | number;
-  restSeconds: number | string;
-  caloriesBurnEstimate: string;
-  imageUrl: string;
+
+  equipmentId: string | null;
+  equipment: Equipment | null;
+
+  videoUrl: string | null;
+  imageUrl: string | null;
+
   instructions: string[];
   commonMistakes: string[];
+
+  defaultSets: number;
+  repsMin: number;
+  repsMax: number;
+  restSeconds: number;
+
+  createdAt: string;
+  updatedAt: string;
+
+  userId: string | null;
+
+  muscles: ExerciseMuscle[];
 }

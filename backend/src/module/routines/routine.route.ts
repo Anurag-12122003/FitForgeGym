@@ -13,6 +13,7 @@ const routineExerciseSchema = z.object({
   sets: z.number().int().default(3),
   repsMin: z.number().int().default(8),
   repsMax: z.number().int().default(12),
+  targetWeightKg: z.number().optional(), // <-- Saved to DB
   restSeconds: z.number().int().default(60),
 });
 
@@ -31,73 +32,140 @@ const createRoutineSchema = z.object({
 
 // GET: Authenticated user's custom routines
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
-  const userId = req.user!.id;
-  const routines = await prisma.routine.findMany({
-    where: { userId },
-    include: {
-      days: {
-        include: {
-          exercises: {
-            include: { exercise: true },
-            orderBy: { order: 'asc' },
+  try {
+    const userId = req.user!.id;
+    const routines = await prisma.routine.findMany({
+      where: { userId },
+      include: {
+        days: {
+          include: {
+            exercises: {
+              include: { exercise: true },
+              orderBy: { order: 'asc' },
+            },
           },
         },
       },
-    },
-  });
-  res.json(routines);
+      orderBy: { updatedAt: 'desc' },
+    });
+    console.log(routines)
+    res.json(routines);
+  } catch (error: any) {
+    console.error('Fetch routines error:', error);
+    res.status(500).json({ message: 'Failed to fetch routines' });
+  }
 });
 
-// POST: Save or replace complete weekly routine
+// POST: Save or replace complete weekly routine (Upsert Pattern)
 router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
     const body = createRoutineSchema.parse(req.body);
 
-    const routine = await prisma.routine.create({
-      data: {
-        userId,
-        name: body.name,
-        goal: body.goal ?? null,
-        days: {
-          create: body.days.map((d) => ({
-            dayOfWeek: d.dayOfWeek,
-            name: d.name,
-            isRestDay: d.isRestDay,
-            exercises: {
-              create: d.exercises.map((e) => ({
-                exerciseId: e.exerciseId,
-                order: e.order,
-                sets: e.sets,
-                repsMin: e.repsMin,
-                repsMax: e.repsMax,
-                restSeconds: e.restSeconds,
+    const savedRoutine = await prisma.$transaction(async (tx) => {
+      // 1. Check if user already has an active routine
+      const existingRoutine = await tx.routine.findFirst({
+        where: { userId, isActive: true },
+      });
+
+      if (existingRoutine) {
+        // Purane days ko delete karo (Cascade delete will clean routineExercise entries)
+        await tx.routineDay.deleteMany({
+          where: { routineId: existingRoutine.id },
+        });
+
+        // Routine details update karo aur naye days inject karo
+        return await tx.routine.update({
+          where: { id: existingRoutine.id },
+          data: {
+            name: body.name,
+            goal: body.goal ?? null,
+            days: {
+              create: body.days.map((d) => ({
+                dayOfWeek: d.dayOfWeek,
+                name: d.name,
+                isRestDay: d.isRestDay,
+                exercises: {
+                  create: d.exercises.map((e) => ({
+                    exerciseId: e.exerciseId,
+                    order: e.order,
+                    sets: e.sets,
+                    repsMin: e.repsMin,
+                    repsMax: e.repsMax,
+                    targetWeightKg: e.targetWeightKg ? e.targetWeightKg : null, // <-- Saved to DB
+                    restSeconds: e.restSeconds,
+                  })),
+                },
               })),
             },
-          })),
+          },
+          include: {
+            days: {
+              include: {
+                exercises: {
+                  include: { exercise: true },
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // 2. Agar routine nahi hai to fresh create karo
+      return await tx.routine.create({
+        data: {
+          userId,
+          name: body.name,
+          goal: body.goal ?? null,
+          isActive: true,
+          days: {
+            create: body.days.map((d) => ({
+              dayOfWeek: d.dayOfWeek,
+              name: d.name,
+              isRestDay: d.isRestDay,
+              exercises: {
+                create: d.exercises.map((e) => ({
+                  exerciseId: e.exerciseId,
+                  order: e.order,
+                  sets: e.sets,
+                  repsMin: e.repsMin,
+                  repsMax: e.repsMax,
+                  targetWeightKg: e.targetWeightKg ? e.targetWeightKg : null, // <-- Saved to DB
+                  restSeconds: e.restSeconds,
+                })),
+              },
+            })),
+          },
         },
-      },
-      include: {
-        days: {
-          include: { exercises: true },
+        include: {
+          days: {
+            include: {
+              exercises: {
+                include: { exercise: true },
+                orderBy: { order: 'asc' },
+              },
+            },
+          },
         },
-      },
+      });
     });
 
-    res.status(201).json(routine);
+    res.status(201).json(savedRoutine);
   } catch (error: any) {
+    console.error('Save routine error:', error);
     res.status(400).json({ message: error.message || 'Failed to save routine' });
   }
 });
 
 // DELETE: Delete personal routine
-router.delete('/:id', authenticate, async (req: Request<{id:string}>, res: Response): Promise<void> => {
+router.delete('/:id', authenticate, async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
     await prisma.routine.deleteMany({
       where: { id: req.params.id, userId },
     });
-    res.json({ message: 'Routine removed' });
+    res.json({ message: 'Routine removed successfully' });
   } catch (error: any) {
     res.status(400).json({ message: error.message || 'Delete failed' });
   }

@@ -4,6 +4,7 @@ import { prisma } from '../../config/database.js';
 import { authenticate, requireRole } from '../../middleware/auth.middleware.js';
 import { Role } from '../../generated/prisma/client.js';
 import { z } from 'zod';
+import { upload, uploadToCloudinary } from '../../config/cloudnary.js';
 
 const router = Router();
 
@@ -19,6 +20,63 @@ const createFoodSchema = z.object({
   imageUrl: z.string().url().optional(),
 });
 
+/**
+ * POST /api/foods/user-custom
+ * User adds their own custom ingredient/dish with photo
+ */
+router.post(
+  '/user-custom',
+  authenticate,
+  upload.single('file'),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const { name, servingAmount, servingUnit, calories, protein, carbs, fat, fiber } = req.body;
+
+      if (!name || !calories) {
+        res.status(400).json({ message: 'Name and calories are required' });
+        return;
+      }
+
+      let imageUrl: string | null = null;
+
+      // Handle optional image upload to Cloudinary
+      if (req.file) {
+        imageUrl = await uploadToCloudinary(
+          req.file.buffer,
+          `users/${userId}/foods`,
+          req.file.mimetype
+        );
+      }
+
+      const slugBase = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const slug = `${slugBase}-${Date.now()}`;
+
+      const food = await prisma.food.create({
+        data: {
+          name,
+          slug,
+          servingAmount: parseFloat(servingAmount) || 100,
+          servingUnit: servingUnit || 'g',
+          calories: parseFloat(calories) || 0,
+          protein: parseFloat(protein) || 0,
+          carbs: parseFloat(carbs) || 0,
+          fat: parseFloat(fat) || 0,
+          fiber: parseFloat(fiber) || 0,
+          imageUrl,
+        },
+      });
+
+      res.status(201).json({
+        message: 'Custom food created successfully',
+        food,
+      });
+    } catch (error: any) {
+      console.error('Custom food creation error:', error);
+      res.status(500).json({ message: error.message || 'Failed to create food' });
+    }
+  }
+);
 // GET: Public list of catalog foods
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {

@@ -26,6 +26,8 @@ import { uploadApi } from '../../api/uploadApi';
 import { exerciseApi } from '../../api/exerciseApi';
 import { foodApi } from '../../api/foodApi';
 import { authApi } from '../../api/authApi';
+import { muscleApi } from '../../api/muscleApi';
+import { equipmentApi } from '../../api/equipmentApi';
 
 const USER_REGISTRATION_TRENDS = [
     { month: 'Jan', users: 140 },
@@ -36,12 +38,6 @@ const USER_REGISTRATION_TRENDS = [
     { month: 'Jun', users: 1850 },
 ];
 
-const MOCK_USERS_LIST = [
-    { id: 'u_1', name: 'Aman Verma', email: 'aman@gmail.com', goal: 'Muscle Gain', joined: '2026-05-10', status: 'Active' },
-    { id: 'u_2', name: 'Pooja Nair', email: 'pooja.fit@outlook.com', goal: 'Fat Loss', joined: '2026-05-18', status: 'Active' },
-    { id: 'u_3', name: 'Rohan Mehta', email: 'rohan.m@gmail.com', goal: 'Strength', joined: '2026-06-01', status: 'Active' },
-    { id: 'u_4', name: 'Sneha Patel', email: 'sneha99@yahoo.com', goal: 'Longevity', joined: '2026-06-12', status: 'Inactive' },
-];
 
 const MUSCLE_PILLS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Abs', 'Calves'];
 
@@ -68,6 +64,7 @@ type ExerciseFormData = {
     repsMin: number | string;
     repsMax: number | string;
     restTime: number | string;
+    targetWeightKg: number | string;
     instructions: string[];
     commonMistakes: string[];
     exPreviewUrl: string | null;
@@ -81,6 +78,15 @@ export const AdminFullPage: React.FC = () => {
     const { data: exercisesList = [], isLoading: loadingExercises } = useQuery({
         queryKey: ['admin-exercises'],
         queryFn: exerciseApi.getAll,
+    });
+    const { data: muscles = [] } = useQuery({
+        queryKey: ['muscles'],
+        queryFn: muscleApi.getAll,
+    });
+    // Component ke andar query add karo:
+    const { data: equipments = [] } = useQuery({
+        queryKey: ['equipments'],
+        queryFn: equipmentApi.getAll,
     });
 
     const { data: foodsList = [], isLoading: loadingFoods } = useQuery({
@@ -104,21 +110,23 @@ export const AdminFullPage: React.FC = () => {
     const [isFoodModalOpen, setIsFoodModalOpen] = useState(false);
 
     // Form State
-    const [exerciseFormData, setExerciseFormData] = useState<ExerciseFormData>({
+    const [exerciseFormData, setExerciseFormData] = useState({
         exName: '',
         exDescription: '',
         exDifficulty: 'INTERMEDIATE',
-        exMuscle: 'Chest',
+        exMuscle: '',
         exSecondaryMuscles: [],
-        exEquipment: 'Barbell',
+        exEquipment: '',
         set: 3,
         repsMin: 8,
         repsMax: 12,
         restTime: 90,
+        targetWeightKg: 10,
         instructions: [],
         commonMistakes: [],
         exPreviewUrl: null,
     });
+
 
     const [foodFormData, setFoodFormData] = useState<FoodFormData>({
         foodName: '',
@@ -176,14 +184,20 @@ export const AdminFullPage: React.FC = () => {
         handleExerciseDataChange('commonMistakes', exerciseFormData.commonMistakes.filter((_, i) => i !== index));
     };
 
-    const toggleSecondaryMuscle = (muscle: string) => {
-        const current = [...exerciseFormData.exSecondaryMuscles];
-        if (current.includes(muscle)) {
-            handleExerciseDataChange('exSecondaryMuscles', current.filter((m) => m !== muscle));
-        } else {
-            handleExerciseDataChange('exSecondaryMuscles', [...current, muscle]);
-        }
+    const toggleSecondaryMuscle = (muscleId: string) => {
+        setExerciseFormData((prev) => {
+            const exists = prev.exSecondaryMuscles.includes(muscleId);
+            return {
+                ...prev,
+                exSecondaryMuscles: exists
+                    ? prev.exSecondaryMuscles.filter(
+                        (id) => id !== muscleId
+                    )
+                    : [...prev.exSecondaryMuscles, muscleId],
+            };
+        });
     };
+
 
     // Mutations
     const deleteExerciseMutation = useMutation({
@@ -198,7 +212,6 @@ export const AdminFullPage: React.FC = () => {
 
     // Admin Exercise Create & Upload Handler (Matches: POST /assets/admin)
     const handleCreateExercise = async (e: React.FormEvent) => {
-        debugger
         e.preventDefault();
         setIsProcessing(true);
 
@@ -214,6 +227,7 @@ export const AdminFullPage: React.FC = () => {
                 repsMin: Number(exerciseFormData.repsMin),
                 repsMax: Number(exerciseFormData.repsMax),
                 restSeconds: Number(exerciseFormData.restTime),
+                targetWeightKg: Number(exerciseFormData.targetWeightKg),
                 instructions: exerciseFormData.instructions,
                 commonMistakes: exerciseFormData.commonMistakes,
             });
@@ -230,17 +244,19 @@ export const AdminFullPage: React.FC = () => {
                 exName: '',
                 exDescription: '',
                 exDifficulty: 'INTERMEDIATE',
-                exMuscle: 'Chest',
+                exMuscle: '',
                 exSecondaryMuscles: [],
-                exEquipment: 'Barbell',
+                exEquipment: '',
                 set: 3,
                 repsMin: 8,
                 repsMax: 12,
                 restTime: 90,
+                targetWeightKg: 10,
                 instructions: [],
                 commonMistakes: [],
                 exPreviewUrl: null,
             });
+
         } catch (err) {
             console.error('Failed to create and upload exercise:', err);
         } finally {
@@ -638,36 +654,65 @@ export const AdminFullPage: React.FC = () => {
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {/* PRIMARY MUSCLE */}
                                 <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Primary Muscle *</label>
+                                    <label className="block text-xs text-slate-400 mb-1">
+                                        Primary Muscle *
+                                    </label>
+
                                     <select
                                         value={exerciseFormData.exMuscle}
-                                        onChange={(e) => handleExerciseDataChange('exMuscle', e.target.value)}
+                                        onChange={(e) =>
+                                            handleExerciseDataChange('exMuscle', e.target.value)
+                                        }
+                                        required
                                         className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                                     >
-                                        {MUSCLE_PILLS.map((m) => (
-                                            <option key={m} value={m}>{m}</option>
+                                        <option value="">Select muscle</option>
+
+                                        {muscles.map((muscle: any) => (
+                                            <option key={muscle.id} value={muscle.id}>
+                                                {muscle.name}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
 
+                                {/* EQUIPMENT */}
+                                {/* EQUIPMENT DROPDOWN */}
                                 <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Equipment</label>
-                                    <input
-                                        type="text"
-                                        required
+                                    <label className="block text-xs text-slate-400 mb-1">
+                                        Equipment *
+                                    </label>
+                                    <select
                                         value={exerciseFormData.exEquipment}
                                         onChange={(e) => handleExerciseDataChange('exEquipment', e.target.value)}
-                                        placeholder="e.g. Dumbbells"
+                                        required
                                         className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                                    />
+                                    >
+                                        <option value="">Select Equipment</option>
+                                        {equipments.map((eq: any) => (
+                                            <option key={eq.id} value={eq.id}>
+                                                {eq.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
+                                {/* DIFFICULTY */}
                                 <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Difficulty</label>
+                                    <label className="block text-xs text-slate-400 mb-1">
+                                        Difficulty
+                                    </label>
+
                                     <select
                                         value={exerciseFormData.exDifficulty}
-                                        onChange={(e) => handleExerciseDataChange('exDifficulty', e.target.value as any)}
+                                        onChange={(e) =>
+                                            handleExerciseDataChange(
+                                                'exDifficulty',
+                                                e.target.value as any
+                                            )
+                                        }
                                         className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                                     >
                                         <option value="BEGINNER">Beginner</option>
@@ -677,29 +722,46 @@ export const AdminFullPage: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* SECONDARY MUSCLES */}
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1.5">Secondary Muscles Involved</label>
+                                <label className="block text-xs text-slate-400 mb-1.5">
+                                    Secondary Muscles Involved
+                                </label>
+
                                 <div className="flex flex-wrap gap-1.5">
-                                    {MUSCLE_PILLS.filter((m) => m !== exerciseFormData.exMuscle).map((m) => {
-                                        const isSelected = exerciseFormData.exSecondaryMuscles.includes(m);
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={m}
-                                                onClick={() => toggleSecondaryMuscle(m)}
-                                                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${isSelected
+                                    {muscles
+                                        .filter(
+                                            (muscle: any) =>
+                                                muscle.id !== exerciseFormData.exMuscle
+                                        )
+                                        .map((muscle: any) => {
+                                            const isSelected =
+                                                exerciseFormData.exSecondaryMuscles.includes(
+                                                    muscle.id
+                                                );
+
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={muscle.id}
+                                                    onClick={() =>
+                                                        toggleSecondaryMuscle(muscle.id)
+                                                    }
+                                                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${isSelected
                                                         ? 'bg-emerald-500 text-slate-950 font-bold'
                                                         : 'bg-slate-800 text-slate-400 hover:text-white'
-                                                    }`}
-                                            >
-                                                {m} {isSelected && '✓'}
-                                            </button>
-                                        );
-                                    })}
+                                                        }`}
+                                                >
+                                                    {muscle.name}
+
+                                                    {isSelected && ' ✓'}
+                                                </button>
+                                            );
+                                        })}
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-4 gap-2 p-2">
+                            <div className="grid grid-cols-5 gap-2 p-2">
                                 <div>
                                     <label className="block text-[11px] text-slate-400 mb-1">Sets</label>
                                     <input
@@ -733,6 +795,15 @@ export const AdminFullPage: React.FC = () => {
                                         type="number"
                                         value={exerciseFormData.restTime}
                                         onChange={(e) => handleExerciseDataChange('restTime', e.target.value)}
+                                        className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2 text-xs text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] text-slate-400 mb-1">Target Weight (Kg)</label>
+                                    <input
+                                        type="number"
+                                        value={exerciseFormData.targetWeightKg}
+                                        onChange={(e) => handleExerciseDataChange('targetWeightKg', e.target.value)}
                                         className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2 text-xs text-white"
                                     />
                                 </div>

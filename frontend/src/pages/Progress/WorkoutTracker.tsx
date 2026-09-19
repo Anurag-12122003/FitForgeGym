@@ -1,63 +1,90 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Check, 
-  Plus, 
-  Clock, 
-  Trophy, 
-  X, 
-  ChevronLeft, 
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  Check,
+  Plus,
+  Clock,
+  Trophy,
+  X,
+  ChevronLeft,
   ChevronRight,
-  Flame
+  Dumbbell
 } from 'lucide-react';
 import type { TrackedExercise, TrackedSet } from '../../types/traker.types';
+import { routineApi } from '../../api/routineApi';
 
-const INITIAL_EXERCISES: TrackedExercise[] = [
-  {
-    id: 'e_1',
-    name: 'Barbell Flat Bench Press',
-    muscle: 'Chest',
-    targetRestSeconds: 90,
-    sets: [
-      { id: 's_1', setNumber: 1, prevWeightKg: 60, prevReps: 12, weightKg: 60, reps: 12, isCompleted: true },
-      { id: 's_2', setNumber: 2, prevWeightKg: 60, prevReps: 10, weightKg: 60, reps: 10, isCompleted: true },
-      { id: 's_3', setNumber: 3, prevWeightKg: 65, prevReps: 8, weightKg: 65, reps: 8, isCompleted: false },
-      { id: 's_4', setNumber: 4, prevWeightKg: 65, prevReps: 7, weightKg: 65, reps: 8, isCompleted: false },
-    ]
-  },
-  {
-    id: 'e_2',
-    name: 'Incline Dumbbell Press',
-    muscle: 'Chest',
-    targetRestSeconds: 60,
-    sets: [
-      { id: 's_5', setNumber: 1, prevWeightKg: 24, prevReps: 12, weightKg: 24, reps: 12, isCompleted: false },
-      { id: 's_6', setNumber: 2, prevWeightKg: 24, prevReps: 10, weightKg: 24, reps: 10, isCompleted: false },
-      { id: 's_7', setNumber: 3, prevWeightKg: 26, prevReps: 8, weightKg: 26, reps: 8, isCompleted: false },
-    ]
-  },
-  {
-    id: 'e_3',
-    name: 'Triceps Rope Pushdown',
-    muscle: 'Triceps',
-    targetRestSeconds: 60,
-    sets: [
-      { id: 's_8', setNumber: 1, prevWeightKg: 30, prevReps: 15, weightKg: 30, reps: 15, isCompleted: false },
-      { id: 's_9', setNumber: 2, prevWeightKg: 35, prevReps: 12, weightKg: 35, reps: 12, isCompleted: false },
-      { id: 's_10', setNumber: 3, prevWeightKg: 35, prevReps: 10, weightKg: 35, reps: 10, isCompleted: false },
-    ]
-  }
-];
+const DAYS_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
 
 export const WorkoutTrackerPage: React.FC = () => {
   const navigate = useNavigate();
-  const [exercises, setExercises] = useState<TrackedExercise[]>(INITIAL_EXERCISES);
+  const location = useLocation();
+
+  // 1. Check if workout day was passed from Dashboard
+  const passedWorkoutDay = (location.state as any)?.workoutDay;
+  const passedRoutineName = (location.state as any)?.routineName;
+
+  // 2. Query as fallback in case user lands directly on /workout-session
+  const { data: routines = [] } = useQuery({
+    queryKey: ['my-routines'],
+    queryFn: routineApi.getMyRoutines,
+    enabled: !passedWorkoutDay,
+  });
+
+  const activeRoutine = routines[0];
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  const todayDayEnum = DAYS_ORDER[todayIdx];
+  const fallbackWorkoutDay = activeRoutine?.days?.find((d) => d.dayOfWeek === todayDayEnum);
+
+  const effectiveWorkoutDay = passedWorkoutDay || fallbackWorkoutDay;
+  const sessionTitle = effectiveWorkoutDay?.name || passedRoutineName || 'Live Gym Workout';
+
+  // 3. Dynamic exercise transformation function
+  const buildInitialExercises = (): TrackedExercise[] => {
+    if (!effectiveWorkoutDay?.exercises || effectiveWorkoutDay.exercises.length === 0) {
+      return [];
+    }
+
+    return effectiveWorkoutDay.exercises.map((item: any, exIdx: number) => {
+      const exData = item.exercise;
+      const targetSetsCount = item.sets || 3;
+      const targetReps = item.repsMin || 10;
+
+      const sets: TrackedSet[] = Array.from({ length: targetSetsCount }).map((_, sIdx) => ({
+        id: `s_${exIdx}_${sIdx}_${Date.now()}`,
+        setNumber: sIdx + 1,
+        prevWeightKg: 40, // baseline default
+        prevReps: targetReps,
+        weightKg: 40,
+        reps: targetReps,
+        isCompleted: false,
+      }));
+
+      const primaryMuscle = exData?.muscles?.find((m: any) => m.role === 'PRIMARY')?.muscle?.name || 'General';
+
+      return {
+        id: exData?.id || `ex_${exIdx}`,
+        name: exData?.name || 'Exercise Movement',
+        muscle: primaryMuscle,
+        targetRestSeconds: item.restSeconds || 90,
+        sets,
+      };
+    });
+  };
+
+  const [exercises, setExercises] = useState<TrackedExercise[]>([]);
   const [activeExerciseIdx, setActiveExerciseIdx] = useState(0);
-  
-  // Total Workout Duration Timer
-  const [elapsedSeconds, setElapsedSeconds] = useState(218); // 03:38
-  // Auto Rest Timer
+
+  // Initialize/Sync exercises when effective workout day is determined
+  useEffect(() => {
+    const mapped = buildInitialExercises();
+    setExercises(mapped);
+    setActiveExerciseIdx(0);
+  }, [effectiveWorkoutDay]);
+
+  // Timers
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [restSecondsRemaining, setRestSecondsRemaining] = useState<number | null>(null);
   const [isFinished, setIsFinished] = useState(false);
 
@@ -140,6 +167,41 @@ export const WorkoutTrackerPage: React.FC = () => {
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // If today is marked as rest day or routine has 0 exercises
+  if (exercises.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center space-y-6 rounded-3xl border border-[#1F2937] bg-[#111827] p-8 shadow-2xl">
+          <div className="h-16 w-16 bg-slate-800 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">
+            <Dumbbell className="h-8 w-8" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-[#F8FAFC]">No Exercises Scheduled</h2>
+            <p className="text-xs text-[#94A3B8] mt-2">
+              {effectiveWorkoutDay?.isRestDay
+                ? 'Today is marked as a Rest Day in your routine.'
+                : 'Your current routine day has no exercises configured yet.'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/routine-builder')}
+              className="flex-1 rounded-xl bg-slate-800 border border-slate-700 py-3 text-xs font-bold text-white hover:bg-slate-700 transition"
+            >
+              Open Builder
+            </button>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex-1 rounded-xl bg-[#00D084] py-3 text-xs font-bold text-[#06130E] hover:bg-[#00b975] transition"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Workout Summary Modal/Screen
   if (isFinished) {
     return (
@@ -178,7 +240,7 @@ export const WorkoutTrackerPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0B0F17] text-[#F8FAFC] font-sans antialiased selection:bg-[#00D084] selection:text-[#06130E]">
       
-      {/* 1. STICKY COMPACT GYM HEADER (Height: 72px) */}
+      {/* 1. STICKY COMPACT GYM HEADER */}
       <header className="sticky top-0 z-40 h-[72px] bg-[#0B0F17]/90 backdrop-blur-md border-b border-[#1F2937] px-4 sm:px-8 flex items-center justify-between">
         
         {/* Left: Dashboard link & Title */}
@@ -199,7 +261,9 @@ export const WorkoutTrackerPage: React.FC = () => {
               <span className="h-2 w-2 rounded-full bg-[#00D084] animate-pulse" />
               <span className="text-[10px] font-bold text-[#00D084] tracking-widest uppercase">Live Workout</span>
             </div>
-            <p className="text-sm font-bold text-[#F8FAFC]">Chest + Triceps</p>
+            <p className="text-sm font-bold text-[#F8FAFC] truncate max-w-[200px] sm:max-w-none">
+              {sessionTitle}
+            </p>
           </div>
         </div>
 
@@ -219,21 +283,21 @@ export const WorkoutTrackerPage: React.FC = () => {
         </div>
       </header>
 
-      {/* 2. MAIN WORKOUT CONTAINER (Proper width & constrained margins) */}
+      {/* 2. MAIN WORKOUT CONTAINER */}
       <main className="w-[min(1000px,calc(100%-32px))] sm:w-[min(1000px,calc(100%-48px))] mx-auto py-8 pb-28 space-y-6">
         
         {/* Header Summary Info */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
           <div>
-            <span className="text-[11px] font-bold tracking-wider uppercase text-[#94A3B8]">Today's Workout</span>
-            <h1 className="text-2xl font-black text-[#F8FAFC] tracking-tight">Chest & Triceps Hypertrophy</h1>
+            <span className="text-[11px] font-bold tracking-wider uppercase text-[#94A3B8]">Today's Scheduled Session</span>
+            <h1 className="text-2xl font-black text-[#F8FAFC] tracking-tight">{sessionTitle}</h1>
           </div>
           <p className="text-xs text-[#94A3B8] font-medium">
             {exercises.length} Exercises · {totalSetsCount} Total Sets
           </p>
         </div>
 
-        {/* 3. EXERCISE TABS (Scrollable & Clean) */}
+        {/* 3. EXERCISE TABS */}
         <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
           {exercises.map((ex, idx) => {
             const isActive = activeExerciseIdx === idx;
@@ -273,168 +337,170 @@ export const WorkoutTrackerPage: React.FC = () => {
         </div>
 
         {/* 4. MAIN EXERCISE CARD */}
-        <div className="rounded-2xl border border-[#1F2937] bg-[#111827] p-5 sm:p-7 space-y-6 shadow-2xl">
-          
-          {/* Card Title & Meta Info */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1F2937] pb-5">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-extrabold text-[#00D084] uppercase tracking-widest bg-[#00D084]/10 border border-[#00D084]/20 px-2.5 py-0.5 rounded-md">
-                  {activeExercise.muscle}
-                </span>
-                <span className="text-xs text-[#94A3B8]">
-                  {activeExercise.sets.length} sets · 8–12 reps
-                </span>
+        {activeExercise && (
+          <div className="rounded-2xl border border-[#1F2937] bg-[#111827] p-5 sm:p-7 space-y-6 shadow-2xl">
+            
+            {/* Card Title & Meta Info */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1F2937] pb-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold text-[#00D084] uppercase tracking-widest bg-[#00D084]/10 border border-[#00D084]/20 px-2.5 py-0.5 rounded-md">
+                    {activeExercise.muscle}
+                  </span>
+                  <span className="text-xs text-[#94A3B8]">
+                    {activeExercise.sets.length} sets configured
+                  </span>
+                </div>
+                <h2 className="text-xl font-black text-[#F8FAFC] mt-2">{activeExercise.name}</h2>
               </div>
-              <h2 className="text-xl font-black text-[#F8FAFC] mt-2">{activeExercise.name}</h2>
+
+              <div className="bg-[#0B0F17] border border-[#1F2937] px-3.5 py-2 rounded-xl flex items-center gap-2.5 self-start sm:self-auto">
+                <Clock className="h-4 w-4 text-[#00D084]" />
+                <div className="text-left">
+                  <span className="text-[9px] uppercase font-bold text-[#64748B] block tracking-wider leading-none">Rest Target</span>
+                  <span className="text-xs font-extrabold text-[#F8FAFC] font-mono leading-none">{activeExercise.targetRestSeconds}s</span>
+                </div>
+              </div>
             </div>
 
-            <div className="bg-[#0B0F17] border border-[#1F2937] px-3.5 py-2 rounded-xl flex items-center gap-2.5 self-start sm:self-auto">
-              <Clock className="h-4 w-4 text-[#00D084]" />
-              <div className="text-left">
-                <span className="text-[9px] uppercase font-bold text-[#64748B] block tracking-wider leading-none">Rest Target</span>
-                <span className="text-xs font-extrabold text-[#F8FAFC] font-mono leading-none">{activeExercise.targetRestSeconds}s</span>
-              </div>
+            {/* DESKTOP TABLE VIEW */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#1F2937] text-[#94A3B8] font-bold text-[11px] uppercase tracking-wider">
+                    <th className="pb-3 w-16 text-center">Set</th>
+                    <th className="pb-3 pl-2">Previous</th>
+                    <th className="pb-3 w-36 text-center">Weight (kg)</th>
+                    <th className="pb-3 w-36 text-center">Reps</th>
+                    <th className="pb-3 w-20 text-center">Done</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1F2937]/60">
+                  {activeExercise.sets.map((set) => (
+                    <tr 
+                      key={set.id}
+                      className={`transition-colors ${
+                        set.isCompleted ? 'bg-[#00D084]/[0.05]' : 'hover:bg-slate-800/30'
+                      }`}
+                    >
+                      <td className="py-3.5 text-center font-bold text-[#94A3B8]">
+                        {set.setNumber}
+                      </td>
+
+                      <td className="py-3.5 pl-2 text-[#94A3B8] font-mono font-medium">
+                        {set.prevWeightKg} kg × {set.prevReps}
+                      </td>
+
+                      <td className="py-3.5 text-center">
+                        <input
+                          type="number"
+                          value={set.weightKg}
+                          onChange={(e) => handleUpdateWeight(set.id, parseFloat(e.target.value) || 0)}
+                          className="w-20 h-10 rounded-xl border border-[#334155] bg-[#0B1220] text-center text-sm font-bold text-[#F8FAFC] focus:border-[#00D084] focus:outline-none focus:ring-2 focus:ring-[#00D084]/20 transition"
+                        />
+                      </td>
+
+                      <td className="py-3.5 text-center">
+                        <input
+                          type="number"
+                          value={set.reps}
+                          onChange={(e) => handleUpdateReps(set.id, parseInt(e.target.value) || 0)}
+                          className="w-20 h-10 rounded-xl border border-[#334155] bg-[#0B1220] text-center text-sm font-bold text-[#F8FAFC] focus:border-[#00D084] focus:outline-none focus:ring-2 focus:ring-[#00D084]/20 transition"
+                        />
+                      </td>
+
+                      <td className="py-3.5 text-center">
+                        <button
+                          onClick={() => handleToggleSet(set.id)}
+                          className={`h-10 w-10 mx-auto rounded-xl inline-flex items-center justify-center transition-all ${
+                            set.isCompleted
+                              ? 'bg-[#00D084] text-[#06130E] border border-[#00D084] shadow-md shadow-[#00D084]/20'
+                              : 'bg-[#172235] border border-[#334155] text-[#64748B] hover:border-[#64748B] hover:text-[#94A3B8]'
+                          }`}
+                        >
+                          <Check className="h-5 w-5 stroke-[3]" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
 
-          {/* DESKTOP TABLE VIEW (Visible on tablet & desktop) */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#1F2937] text-[#94A3B8] font-bold text-[11px] uppercase tracking-wider">
-                  <th className="pb-3 w-16 text-center">Set</th>
-                  <th className="pb-3 pl-2">Previous</th>
-                  <th className="pb-3 w-36 text-center">Weight (kg)</th>
-                  <th className="pb-3 w-36 text-center">Reps</th>
-                  <th className="pb-3 w-20 text-center">Done</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1F2937]/60">
-                {activeExercise.sets.map((set) => (
-                  <tr 
-                    key={set.id}
-                    className={`transition-colors ${
-                      set.isCompleted ? 'bg-[#00D084]/[0.05]' : 'hover:bg-slate-800/30'
-                    }`}
-                  >
-                    <td className="py-3.5 text-center font-bold text-[#94A3B8]">
-                      {set.setNumber}
-                    </td>
+            {/* MOBILE CARD VIEW */}
+            <div className="sm:hidden space-y-3">
+              {activeExercise.sets.map((set) => (
+                <div 
+                  key={set.id}
+                  className={`p-3.5 rounded-xl border transition-all ${
+                    set.isCompleted 
+                      ? 'border-[#00D084]/40 bg-[#00D084]/5' 
+                      : 'border-[#1F2937] bg-[#0B0F17]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs bg-[#1F2937] px-2 py-0.5 rounded text-[#94A3B8]">
+                        SET {set.setNumber}
+                      </span>
+                      <span className="text-[11px] text-[#64748B]">
+                        Target: <strong className="text-[#94A3B8] font-mono">{set.prevWeightKg}kg × {set.prevReps}</strong>
+                      </span>
+                    </div>
 
-                    <td className="py-3.5 pl-2 text-[#94A3B8] font-mono font-medium">
-                      {set.prevWeightKg} kg × {set.prevReps}
-                    </td>
+                    <button
+                      onClick={() => handleToggleSet(set.id)}
+                      className={`h-9 w-9 rounded-xl inline-flex items-center justify-center transition-all ${
+                        set.isCompleted
+                          ? 'bg-[#00D084] text-[#06130E] shadow'
+                          : 'bg-[#172235] border border-[#334155] text-[#64748B]'
+                      }`}
+                    >
+                      <Check className="h-4 w-4 stroke-[3]" />
+                    </button>
+                  </div>
 
-                    <td className="py-3.5 text-center">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block mb-1">
+                        Weight (KG)
+                      </label>
                       <input
                         type="number"
                         value={set.weightKg}
                         onChange={(e) => handleUpdateWeight(set.id, parseFloat(e.target.value) || 0)}
-                        className="w-20 h-10 rounded-xl border border-[#334155] bg-[#0B1220] text-center text-sm font-bold text-[#F8FAFC] focus:border-[#00D084] focus:outline-none focus:ring-2 focus:ring-[#00D084]/20 transition"
+                        className="w-full h-10 rounded-lg border border-[#334155] bg-[#111827] text-center text-sm font-bold text-white focus:border-[#00D084] focus:outline-none"
                       />
-                    </td>
+                    </div>
 
-                    <td className="py-3.5 text-center">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block mb-1">
+                        Reps
+                      </label>
                       <input
                         type="number"
                         value={set.reps}
                         onChange={(e) => handleUpdateReps(set.id, parseInt(e.target.value) || 0)}
-                        className="w-20 h-10 rounded-xl border border-[#334155] bg-[#0B1220] text-center text-sm font-bold text-[#F8FAFC] focus:border-[#00D084] focus:outline-none focus:ring-2 focus:ring-[#00D084]/20 transition"
+                        className="w-full h-10 rounded-lg border border-[#334155] bg-[#111827] text-center text-sm font-bold text-white focus:border-[#00D084] focus:outline-none"
                       />
-                    </td>
-
-                    <td className="py-3.5 text-center">
-                      <button
-                        onClick={() => handleToggleSet(set.id)}
-                        className={`h-10 w-10 mx-auto rounded-xl inline-flex items-center justify-center transition-all ${
-                          set.isCompleted
-                            ? 'bg-[#00D084] text-[#06130E] border border-[#00D084] shadow-md shadow-[#00D084]/20'
-                            : 'bg-[#172235] border border-[#334155] text-[#64748B] hover:border-[#64748B] hover:text-[#94A3B8]'
-                        }`}
-                      >
-                        <Check className="h-5 w-5 stroke-[3]" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* MOBILE CARD VIEW (Optimized specifically for smartphones in gym) */}
-          <div className="sm:hidden space-y-3">
-            {activeExercise.sets.map((set) => (
-              <div 
-                key={set.id}
-                className={`p-3.5 rounded-xl border transition-all ${
-                  set.isCompleted 
-                    ? 'border-[#00D084]/40 bg-[#00D084]/5' 
-                    : 'border-[#1F2937] bg-[#0B0F17]'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs bg-[#1F2937] px-2 py-0.5 rounded text-[#94A3B8]">
-                      SET {set.setNumber}
-                    </span>
-                    <span className="text-[11px] text-[#64748B]">
-                      Prev: <strong className="text-[#94A3B8] font-mono">{set.prevWeightKg}kg × {set.prevReps}</strong>
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => handleToggleSet(set.id)}
-                    className={`h-9 w-9 rounded-xl inline-flex items-center justify-center transition-all ${
-                      set.isCompleted
-                        ? 'bg-[#00D084] text-[#06130E] shadow'
-                        : 'bg-[#172235] border border-[#334155] text-[#64748B]'
-                    }`}
-                  >
-                    <Check className="h-4 w-4 stroke-[3]" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block mb-1">
-                      Weight (KG)
-                    </label>
-                    <input
-                      type="number"
-                      value={set.weightKg}
-                      onChange={(e) => handleUpdateWeight(set.id, parseFloat(e.target.value) || 0)}
-                      className="w-full h-10 rounded-lg border border-[#334155] bg-[#111827] text-center text-sm font-bold text-white focus:border-[#00D084] focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider block mb-1">
-                      Reps
-                    </label>
-                    <input
-                      type="number"
-                      value={set.reps}
-                      onChange={(e) => handleUpdateReps(set.id, parseInt(e.target.value) || 0)}
-                      className="w-full h-10 rounded-lg border border-[#334155] bg-[#111827] text-center text-sm font-bold text-white focus:border-[#00D084] focus:outline-none"
-                    />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* + Add Set Button */}
+            <button
+              onClick={handleAddSet}
+              className="w-full h-12 flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#334155] bg-transparent text-xs font-bold text-[#94A3B8] hover:border-[#00D084] hover:text-[#00D084] hover:bg-[#00D084]/5 transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              Add Set
+            </button>
           </div>
+        )}
 
-          {/* + Add Set Button */}
-          <button
-            onClick={handleAddSet}
-            className="w-full h-12 flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#334155] bg-transparent text-xs font-bold text-[#94A3B8] hover:border-[#00D084] hover:text-[#00D084] hover:bg-[#00D084]/5 transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Add Set
-          </button>
-        </div>
-
-        {/* 5. BOTTOM WORKOUT NAVIGATION (Prev / Next exercise switch) */}
+        {/* 5. BOTTOM WORKOUT NAVIGATION */}
         <div className="flex items-center justify-between gap-4 pt-2">
           <button
             disabled={activeExerciseIdx === 0}
@@ -464,7 +530,7 @@ export const WorkoutTrackerPage: React.FC = () => {
         </div>
       </main>
 
-      {/* 6. FLOATING REST COUNTDOWN (Auto-triggers on completing a set) */}
+      {/* 6. FLOATING REST COUNTDOWN */}
       {restSecondsRemaining !== null && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[min(420px,calc(100%-32px))] rounded-2xl border border-[#00D084]/40 bg-[#111827]/95 p-3.5 backdrop-blur-md shadow-2xl flex items-center justify-between">
           <div className="flex items-center gap-3">

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // 1. Import useLocation
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Moon, Dumbbell, Save, Check, X, Tag } from 'lucide-react';
+import { Plus, Trash2, Moon, Dumbbell, Save, Check, X, Tag, ArrowLeft } from 'lucide-react';
 import { routineApi, type RoutineDayPayload } from '../../api/routineApi';
 import { exerciseApi, type ExerciseItem } from '../../api/exerciseApi';
+import { useNavigate } from 'react-router-dom';
+import {CreateCustomExerciseModal} from '../Exercises/CreateCustomExerciseModal';
 
 // Standard Muscle List for Selection
 const AVAILABLE_MUSCLES = [
@@ -33,12 +36,33 @@ const DEFAULT_DAYS: CustomRoutineDay[] = [
 ];
 
 export const RoutineBuilderPage: React.FC = () => {
-  const queryClient = useQueryClient();
-  const [routineName, setRoutineName] = useState('My Hypertrophy Split');
-  const [routineDays, setRoutineDays] = useState<CustomRoutineDay[]>(DEFAULT_DAYS);
+ const queryClient = useQueryClient();
+  const location = useLocation(); // 2. Hook initialize
+  const navigate=useNavigate()
+
+  // Check if a template was passed from WorkoutsPage
+  const incomingTemplate = (location.state as any)?.templatePlan;
+
+  const [routineName, setRoutineName] = useState(
+    incomingTemplate?.title ? `${incomingTemplate.title} (Custom)` : 'My Hypertrophy Split'
+  );
+  const [routineDays, setRoutineDays] = useState<CustomRoutineDay[]>(
+    incomingTemplate?.days?.length ? incomingTemplate.days : DEFAULT_DAYS
+  );
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
+  const [isCustomExerciseModalOpen,setIsCustomExerciseModalOpen]=useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Sync if location state changes dynamically
+  useEffect(() => {
+    if (incomingTemplate) {
+      setRoutineName(`${incomingTemplate.title} (Custom)`);
+      if (incomingTemplate.days && incomingTemplate.days.length > 0) {
+        setRoutineDays(incomingTemplate.days);
+      }
+    }
+  }, [location.state]);
 
   // Backend Exercise List fetch
   const { data: catalogExercises = [] } = useQuery({
@@ -144,6 +168,13 @@ export const RoutineBuilderPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans">
+      <button
+        onClick={() => navigate('/workouts')}
+        className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Workout
+      </button>
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -173,11 +204,10 @@ export const RoutineBuilderPage: React.FC = () => {
             <button
               key={day.dayOfWeek}
               onClick={() => setSelectedDayIdx(idx)}
-              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition ${
-                selectedDayIdx === idx
-                  ? 'border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-500/10'
-                  : 'border-slate-800/80 bg-slate-900/40 hover:border-slate-700'
-              }`}
+              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition ${selectedDayIdx === idx
+                ? 'border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-500/10'
+                : 'border-slate-800/80 bg-slate-900/40 hover:border-slate-700'
+                }`}
             >
               <div>
                 <p className={`text-xs font-bold ${selectedDayIdx === idx ? 'text-emerald-400' : 'text-slate-200'}`}>
@@ -209,11 +239,10 @@ export const RoutineBuilderPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleToggleRest}
-                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                  currentDay.isRestDay
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                    : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
-                }`}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${currentDay.isRestDay
+                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
               >
                 <Moon className="h-3.5 w-3.5 inline mr-1" />
                 {currentDay.isRestDay ? 'Mark as Active Day' : 'Mark as Rest Day'}
@@ -250,11 +279,10 @@ export const RoutineBuilderPage: React.FC = () => {
                       key={muscle}
                       type="button"
                       onClick={() => handleToggleMuscle(muscle)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                        isSelected
-                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                          : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${isSelected
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
                     >
                       {muscle} {isSelected && '✓'}
                     </button>
@@ -318,7 +346,7 @@ export const RoutineBuilderPage: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-white">Select Exercise</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Showing exercises for: <strong className="text-emerald-400">{currentMuscles.join(', ') || 'All Categories'}</strong>
+                  Targeting: <strong className="text-emerald-400">{currentMuscles.join(', ') || 'All Muscles'}</strong>
                 </p>
               </div>
               <button onClick={() => setIsPickerOpen(false)} className="text-slate-400 hover:text-white">
@@ -326,7 +354,18 @@ export const RoutineBuilderPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {/* User Custom Creation Button */}
+            <button
+              onClick={() => {
+                setIsPickerOpen(false);
+                setIsCustomExerciseModalOpen(true);
+              }}
+              className="w-full p-2.5 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/10 flex items-center justify-center gap-1.5 transition"
+            >
+              <Plus className="h-3.5 w-3.5" /> Can't find it? Add Custom Movement
+            </button>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-track]:bg-transparent">
               {filteredCatalog.length === 0 ? (
                 <p className="text-xs text-slate-500 py-6 text-center">
                   No matching exercises found in catalog for the selected muscles.
@@ -355,6 +394,12 @@ export const RoutineBuilderPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Modal Injection */}
+      <CreateCustomExerciseModal
+        isOpen={isCustomExerciseModalOpen}
+        onClose={() => setIsCustomExerciseModalOpen(false)}
+        onCreated={(newEx) => handleAddExercise(newEx)}
+      />
     </div>
   );
 };

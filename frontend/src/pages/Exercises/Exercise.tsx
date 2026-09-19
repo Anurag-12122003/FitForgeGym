@@ -18,11 +18,19 @@ export const ExercisesPage: React.FC = () => {
   });
 
   const filteredExercises = exercises.filter((ex) => {
-    const primary = ex.muscles?.find((m) => m.role === 'PRIMARY')?.muscle.name || '';
-    const matchesMuscle = selectedMuscle === 'All' || primary.toLowerCase().includes(selectedMuscle.toLowerCase());
-    const matchesQuery = ex.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const muscles =
+      ex.muscles?.map((m) => m.muscle.name.toLowerCase()) || [];
+
+    const matchesMuscle =
+      selectedMuscle === 'All' ||
+      muscles.includes(selectedMuscle.toLowerCase());
+
+    const matchesQuery =
+      ex.name.toLowerCase().includes(searchQuery.toLowerCase());
+
     return matchesMuscle && matchesQuery;
   });
+
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -48,11 +56,10 @@ export const ExercisesPage: React.FC = () => {
             <button
               key={muscle}
               onClick={() => setSelectedMuscle(muscle)}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                selectedMuscle === muscle
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${selectedMuscle === muscle
                   ? 'bg-emerald-500 text-slate-950 font-bold'
                   : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               {muscle}
             </button>

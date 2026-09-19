@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC = () => {
   const {
@@ -13,8 +14,8 @@ export const ProtectedRoute: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0B0F19] text-white flex items-center justify-center">
-        Loading...
+      <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -41,6 +42,9 @@ export const ProtectedRoute: React.FC = () => {
   if (!user?.profile && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
+  // if(user?.role === "ADMIN"){
+  //   return <Navigate to="/admin" replace/>
+  // }
 
   return <Outlet />;
 };

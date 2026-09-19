@@ -118,11 +118,12 @@ export const AuthProvider: React.FC<{
     try {
       const data = await authApi.completeProfile(payload);
 
-      if (!data?.user) {
+      if (data?.message !== "Profile updated successfully") {
         throw new Error('Profile completion failed');
       }
 
-      setUser(data.user);
+      const meData = await authApi.getMe();
+      setUser(meData.user);
     } catch (error) {
       // Error ko yahan swallow mat karo
       throw error;

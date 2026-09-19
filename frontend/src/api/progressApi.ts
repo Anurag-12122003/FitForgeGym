@@ -39,4 +39,9 @@ export const progressApi = {
     const res = await apiClient.get('/progress/summary');
     return res.data;
   },
+  // progressApi object ke andar add karo:
+  deleteLog: async (id: string): Promise<{ message: string }> => {
+    const res = await apiClient.delete(`/progress/${id}`);
+    return res.data;
+  },
 };

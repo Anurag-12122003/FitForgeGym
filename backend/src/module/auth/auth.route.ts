@@ -101,7 +101,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 2 * 60 * 60 * 1000,
     });
 
     res.json({
@@ -159,9 +159,7 @@ router.put(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;
-      console.log("UserId", userId)
       const data = updateProfileSchema.parse(req.body);
-      console.log("data", data)
       const profile = await prisma.profile.upsert({
         where: {
           userId,

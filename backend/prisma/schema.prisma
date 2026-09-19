@@ -92,11 +92,11 @@ model Profile {
 // -------------------------------------------------------------
 
 model MuscleGroup {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  muscles     Muscle[]
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  muscles   Muscle[]
+  createdAt DateTime @default(now())
 }
 
 model Muscle {
@@ -164,17 +164,17 @@ model ExerciseMuscle {
 // -------------------------------------------------------------
 
 model WorkoutPlan {
-  id          String        @id @default(uuid())
+  id          String       @id @default(uuid())
   title       String
-  slug        String        @unique
+  slug        String       @unique
   goal        String
-  level       FitnessLevel  @default(BEGINNER)
-  daysPerWeek Int           @default(4)
-  description String?       @db.Text
-  isTemplate  Boolean       @default(true)
+  level       FitnessLevel @default(BEGINNER)
+  daysPerWeek Int          @default(4)
+  description String?      @db.Text
+  isTemplate  Boolean      @default(true)
   days        WorkoutDay[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model WorkoutDay {
@@ -188,16 +188,17 @@ model WorkoutDay {
 }
 
 model WorkoutExercise {
-  id           String      @id @default(uuid())
-  workoutDayId String
-  workoutDay   WorkoutDay  @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
-  exerciseId   String
-  exercise     Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  order        Int         @default(1)
-  sets         Int         @default(3)
-  repsMin      Int         @default(8)
-  repsMax      Int         @default(12)
-  restSeconds  Int         @default(90)
+  id             String      @id @default(uuid())
+  workoutDayId   String
+  workoutDay     WorkoutDay  @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
+  exerciseId     String
+  exercise       Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  order          Int         @default(1)
+  sets           Int         @default(3)
+  repsMin        Int         @default(8)
+  repsMax        Int         @default(12)
+  targetWeightKg Float?      // <-- Target weight in kg recommended by AI
+  restSeconds    Int         @default(90)
 }
 
 // -------------------------------------------------------------
@@ -205,42 +206,43 @@ model WorkoutExercise {
 // -------------------------------------------------------------
 
 model Routine {
-  id          String       @id @default(uuid())
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  goal        String?
-  isActive    Boolean      @default(true)
-  days        RoutineDay[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  goal      String?
+  isActive  Boolean      @default(true)
+  days      RoutineDay[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   @@index([userId])
 }
 
 model RoutineDay {
-  id          String            @id @default(uuid())
-  routineId   String
-  routine     Routine           @relation(fields: [routineId], references: [id], onDelete: Cascade)
-  dayOfWeek   DayOfWeek
-  name        String
-  isRestDay   Boolean           @default(false)
-  exercises   RoutineExercise[]
+  id         String            @id @default(uuid())
+  routineId  String
+  routine    Routine           @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  dayOfWeek  DayOfWeek
+  name       String
+  isRestDay  Boolean           @default(false)
+  exercises  RoutineExercise[]
 
   @@unique([routineId, dayOfWeek])
 }
 
 model RoutineExercise {
-  id           String     @id @default(uuid())
-  routineDayId String
-  routineDay   RoutineDay @relation(fields: [routineDayId], references: [id], onDelete: Cascade)
-  exerciseId   String
-  exercise     Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  order        Int        @default(1)
-  sets         Int        @default(3)
-  repsMin      Int        @default(8)
-  repsMax      Int        @default(12)
-  restSeconds  Int        @default(90)
+  id             String      @id @default(uuid())
+  routineDayId   String
+  routineDay     RoutineDay  @relation(fields: [routineDayId], references: [id], onDelete: Cascade)
+  exerciseId     String
+  exercise       Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  order          Int         @default(1)
+  sets           Int         @default(3)
+  repsMin        Int         @default(8)
+  repsMax        Int         @default(12)
+  targetWeightKg Float?      // <-- Target weight in kg recommended by AI
+  restSeconds    Int         @default(90)
 }
 
 // -------------------------------------------------------------
@@ -248,7 +250,7 @@ model RoutineExercise {
 // -------------------------------------------------------------
 
 model WorkoutSession {
-  id              String      @id @default(uuid())
+  id              String       @id @default(uuid())
   userId          String
   user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   routineId       String?
@@ -283,22 +285,22 @@ model WorkoutSet {
 // -------------------------------------------------------------
 
 model Food {
-  id            String      @id @default(uuid())
-  name          String      @unique
-  slug          String      @unique
-  servingAmount Float       @default(100)
-  servingUnit   String      @default("g")
+  id            String   @id @default(uuid())
+  name          String   @unique
+  slug          String   @unique
+  servingAmount Float    @default(100)
+  servingUnit   String   @default("g")
   calories      Float
   protein       Float
   carbs         Float
   fat           Float
-  fiber         Float       @default(0)
+  fiber         Float    @default(0)
   imageUrl      String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  mealFoods     MealFood[]
-  logFoods      NutritionLogItem[]
+  mealFoods MealFood[]
+  logFoods  NutritionLogItem[]
 
   @@index([slug])
 }

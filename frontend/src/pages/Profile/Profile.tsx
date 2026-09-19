@@ -3,9 +3,8 @@ import { User, Lock, Check, Save } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const ProfilePage: React.FC = () => {
-  const { user } = useAuth();
-
-  const [name, setName] = useState(user?.fullName ?? '');
+  const { user, completeProfile } = useAuth();
+  const [name] = useState(user?.fullName ?? '');
   const [email] = useState(user?.email ?? '');
 
   const [age, setAge] = useState<number | ''>(user?.profile?.age ?? '');
@@ -28,12 +27,20 @@ export const ProfilePage: React.FC = () => {
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-
+  const genderUser=user?.profile?.gender === "MALE" ? "MALE" : "FEMALE"
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // TODO: Replace with your profile update API call.
     setSavedSuccess(true);
+    const payload = {
+      gender:genderUser,
+      fitnessLevel:fitnessLevel,
+      primaryGoal:fitnessGoal,
+      age: Number(age),
+      heightCm: Number(height),
+      weightKg: Number(weight),
+    };
+    completeProfile(payload);
 
     setTimeout(() => {
       setSavedSuccess(false);
@@ -125,10 +132,12 @@ export const ProfilePage: React.FC = () => {
                   <input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter full name"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                  />
+                    // onChange={(e) => setName(e.target.value)}
+                    disabled
+                    // placeholder="Enter full name"
+                    // className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900/30 p-2.5 text-xs text-slate-500 cursor-not-allowed"
+                    />
                 </div>
 
                 <div>

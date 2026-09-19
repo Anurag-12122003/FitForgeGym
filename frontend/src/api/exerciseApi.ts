@@ -35,4 +35,8 @@ export const exerciseApi = {
     const res = await apiClient.delete(`/exercises/admin/${id}`);
     return res.data;
   },
+  getBySlug: async (slug: string | undefined) => {
+        const response = await apiClient.get(`/exercises/${slug}`);
+        return response.data;
+    },
 };

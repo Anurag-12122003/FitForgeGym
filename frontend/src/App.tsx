@@ -17,6 +17,8 @@ import { WorkoutTrackerPage } from './pages/Progress/WorkoutTracker';
 import { ProgressPage } from './pages/Progress/Progress';
 import { ProfilePage } from './pages/Profile/Profile';
 import { AdminFullPage } from './pages/Admin/AdminFullPage';
+// import VideoComponent from './components/video/VideoComponent';
+import ExerciseVideoPlayer from './components/video/VideoComponent';
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
+          {/* <Route path="/video" element={<VideoComponent url={'https://www.instagram.com/reel/DaBDYC2p3GD'} />} /> */}
+          <Route path="/video" element={<ExerciseVideoPlayer title={'My Upper Chest'} url={'https://www.instagram.com/reel/DaBDYC2p3GD'} />} />
 
           {/* Public Only (Unauthenticated) Routes */}
           <Route element={<PublicOnlyRoute />}>

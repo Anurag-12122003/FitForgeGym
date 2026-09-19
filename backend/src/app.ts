@@ -9,12 +9,15 @@ import foodRoutes from './module/foods/food.route.js';
 import dietRoutes from './module/nutrition/diet.route.js';
 import uploadRoutes from './module/upload/upload.route.js';
 import progressRoutes from './module/progress/progress.route.js';
+import muscleRouter from './module/muscles/muscle.route.js';
+import aiRoutes from './module/ai/ai.route.js';
+import equipmentRoutes from './module/equipment/equipment.route.js';
 
 export const app = express();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: process.env.CLIENT_URL || 'http://localhost:5173' || 'http://localhost:5174',
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"]
   })
@@ -32,6 +35,9 @@ app.use('/api/foods', foodRoutes);
 app.use('/api/diet-plans', dietRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/muscles', muscleRouter);
+app.use('/api/ai', aiRoutes);
+app.use('/api/equipment', equipmentRoutes);
 
 // Health Check
 app.get('/api/health', (_req, res) => {

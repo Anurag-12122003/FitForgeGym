@@ -123,11 +123,11 @@ router.post(
             },
             data: isVideo
               ? {
-                  videoUrl: fileUrl,
-                }
+                videoUrl: fileUrl,
+              }
               : {
-                  imageUrl: fileUrl,
-                },
+                imageUrl: fileUrl,
+              },
           });
 
         res.status(200).json({
@@ -230,6 +230,7 @@ router.post(
         repsMin,
         repsMax,
         restSeconds,
+        targetWeightKg
       } = req.body;
 
       if (!name) {
@@ -313,7 +314,14 @@ router.post(
 
           difficulty: difficulty || 'BEGINNER',
 
-          equipmentId: equipmentId || null,
+          // ✅ Fix 1: equipment ko connect karne ka sahi tarika
+          ...(data.equipmentId
+            ? {
+              equipment: {
+                connect: { id: data.equipmentId },
+              },
+            }
+            : {}),
 
           imageUrl,
           videoUrl,
@@ -341,8 +349,9 @@ router.post(
           restSeconds: restSeconds
             ? Number(restSeconds)
             : 90,
+          targetWeightKg: Number(targetWeightKg),
 
-          createdById: userId,
+          userId: userId,
 
           isPublic: false,
         },

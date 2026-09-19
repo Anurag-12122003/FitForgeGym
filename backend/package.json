@@ -8,7 +8,11 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "seed": "prisma db seed",
+    "seedExercise": "tsx prisma/seedExercise.ts",
     "build": "tsc"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
