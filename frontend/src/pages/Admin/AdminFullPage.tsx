@@ -227,7 +227,7 @@ export const AdminFullPage: React.FC = () => {
                 repsMin: Number(exerciseFormData.repsMin),
                 repsMax: Number(exerciseFormData.repsMax),
                 restSeconds: Number(exerciseFormData.restTime),
-                targetWeightKg: Number(exerciseFormData.targetWeightKg),
+                // targetWeightKg: Number(exerciseFormData.targetWeightKg),
                 instructions: exerciseFormData.instructions,
                 commonMistakes: exerciseFormData.commonMistakes,
             });

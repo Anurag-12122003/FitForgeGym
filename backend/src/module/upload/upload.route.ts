@@ -230,7 +230,9 @@ router.post(
         repsMin,
         repsMax,
         restSeconds,
-        targetWeightKg
+        targetWeightKg,
+        primaryMuscleId,
+        secondaryMuscleIds,
       } = req.body;
 
       if (!name) {
@@ -315,16 +317,33 @@ router.post(
           difficulty: difficulty || 'BEGINNER',
 
           // ✅ Fix 1: equipment ko connect karne ka sahi tarika
-          ...(data.equipmentId
+          ...(equipmentId
             ? {
               equipment: {
-                connect: { id: data.equipmentId },
+                connect: { id: equipmentId },
               },
             }
             : {}),
 
           imageUrl,
           videoUrl,
+          // ✅ Muscles relation connection
+          muscles: {
+            create: [
+              ...(primaryMuscleId
+                ? [{ muscleId: primaryMuscleId, role: 'PRIMARY' as const }]
+                : []),
+              ...(secondaryMuscleIds
+                ? (typeof secondaryMuscleIds === 'string'
+                  ? JSON.parse(secondaryMuscleIds)
+                  : secondaryMuscleIds
+                ).map((id: string) => ({
+                  muscleId: id,
+                  role: 'SECONDARY' as const,
+                }))
+                : []),
+            ],
+          },
 
           instructions: instructions
             ? JSON.parse(instructions)
@@ -349,11 +368,11 @@ router.post(
           restSeconds: restSeconds
             ? Number(restSeconds)
             : 90,
-          targetWeightKg: Number(targetWeightKg),
+          // targetWeightKg: Number(targetWeightKg),
 
           userId: userId,
 
-          isPublic: false,
+          // isPublic: false,
         },
       });
 

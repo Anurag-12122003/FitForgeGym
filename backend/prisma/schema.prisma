@@ -152,7 +152,7 @@ model ExerciseMuscle {
   exerciseId String
   muscleId   String
   role       MuscleRole @default(PRIMARY)
-
+  region     String?
   exercise   Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   muscle     Muscle     @relation(fields: [muscleId], references: [id], onDelete: Cascade)
 

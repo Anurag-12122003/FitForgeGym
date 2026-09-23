@@ -399,6 +399,14 @@ export const RoutineBuilderPage: React.FC = () => {
         isOpen={isCustomExerciseModalOpen}
         onClose={() => setIsCustomExerciseModalOpen(false)}
         onCreated={(newEx) => handleAddExercise(newEx)}
+        muscles={AVAILABLE_MUSCLES.map((m) => ({ id: m, name: m }))}
+        equipments={[
+          { id: 'BARBELL', name: 'Barbell' },
+          { id: 'DUMBBELL', name: 'Dumbbell' },
+          { id: 'MACHINE', name: 'Machine' },
+          { id: 'CABLE', name: 'Cable' },
+          { id: 'BODYWEIGHT', name: 'Bodyweight' }
+        ]}
       />
     </div>
   );

@@ -1,4 +1,20 @@
 import { apiClient } from './client';
+export interface CreateUserExercisePayload {
+  name: string;
+  description?: string;
+  difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  equipmentId?: string;
+  primaryMuscleId?: string;
+  secondaryMuscleIds?: string[];
+  defaultSets?: number;
+  repsMin?: number;
+  repsMax?: number;
+  restSeconds?: number;
+  targetWeightKg?: number;
+  instructions?: string[];
+  commonMistakes?: string[];
+  image?: File;
+}
 
 export const uploadApi = {
   /**
@@ -49,118 +65,31 @@ export const uploadApi = {
    * POST /assets/user/exercises
    * =====================================================
    */
-  createUserExercise: async (data: {
-    name: string;
-    description?: string;
-    difficulty?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-    equipmentId?: string;
-    image?: File;
-    video?: File;
-    instructions?: string[];
-    commonMistakes?: string[];
-    defaultSets?: number;
-    repsMin?: number;
-    repsMax?: number;
-    targetWeightKg?:number;
-    restSeconds?: number;
-  }) => {
-    const formData = new FormData();
+  createUserExercise: async (data: FormData | CreateUserExercisePayload): Promise<any> => {
+    let payload: FormData;
 
-    formData.append('name', data.name);
-
-    if (data.description) {
-      formData.append(
-        'description',
-        data.description
-      );
+    if (data instanceof FormData) {
+      payload = data;
+    } else {
+      payload = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (Array.isArray(value)) {
+            payload.append(key, JSON.stringify(value));
+          } else if (value instanceof File) {
+            payload.append(key, value);
+          } else {
+            payload.append(key, String(value));
+          }
+        }
+      });
     }
 
-    if (data.difficulty) {
-      formData.append(
-        'difficulty',
-        data.difficulty
-      );
-    }
-
-    if (data.equipmentId) {
-      formData.append(
-        'equipmentId',
-        data.equipmentId
-      );
-    }
-
-    if (data.image) {
-      formData.append(
-        'image',
-        data.image
-      );
-    }
-
-    if (data.video) {
-      formData.append(
-        'video',
-        data.video
-      );
-    }
-
-    if (data.instructions) {
-      formData.append(
-        'instructions',
-        JSON.stringify(data.instructions)
-      );
-    }
-
-    if (data.commonMistakes) {
-      formData.append(
-        'commonMistakes',
-        JSON.stringify(data.commonMistakes)
-      );
-    }
-
-    if (data.defaultSets !== undefined) {
-      formData.append(
-        'defaultSets',
-        String(data.defaultSets)
-      );
-    }
-
-    if (data.repsMin !== undefined) {
-      formData.append(
-        'repsMin',
-        String(data.repsMin)
-      );
-    }
-
-    if (data.repsMax !== undefined) {
-      formData.append(
-        'repsMax',
-        String(data.repsMax)
-      );
-    }
-
-    if (data.restSeconds !== undefined) {
-      formData.append(
-        'restSeconds',
-        String(data.restSeconds)
-      );
-    }
-    if (data.targetWeightKg !== undefined) {
-      formData.append(
-        'targetWeightKg',
-        String(data.targetWeightKg)
-      );
-    }
-
-    const res = await apiClient.post(
-      '/upload/user/exercises',
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }
-    );
-
+    const res = await apiClient.post('/upload/user/exercises', payload, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return res.data;
   },
 };

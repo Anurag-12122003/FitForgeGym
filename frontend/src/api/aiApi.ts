@@ -29,6 +29,9 @@ export const aiApi = {
     experienceLevel: string;
     daysPerWeek: number;
     durationMinutes: number;
+    heightCm:number;
+    weightKg:number;
+    age:number;
   }): Promise<AIGeneratedRoutineResponse> => {
     const res = await apiClient.post('/ai/generate-routine', payload);
     return res.data;

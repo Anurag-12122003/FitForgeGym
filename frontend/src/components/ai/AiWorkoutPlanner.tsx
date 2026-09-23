@@ -20,7 +20,7 @@ export const AIWorkoutModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [generatedResult, setGeneratedResult] = useState<any | null>(null);
 
   const generateMutation = useMutation({
-    mutationFn: aiApi.generateWorkout,
+    mutationFn: aiApi.generateRoutine,
     onSuccess: (data) => {
       setGeneratedResult(data);
     },
@@ -110,7 +110,7 @@ export const AIWorkoutModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
 
             <button
-              onClick={() =>
+              onClick={() =>{
                 generateMutation.mutate({
                   goal,
                   experienceLevel: experience,
@@ -118,6 +118,7 @@ export const AIWorkoutModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   durationMinutes: duration,
                   equipmentAvailable: ['Barbell', 'Dumbbells', 'Cable Machine'],
                 })
+              }
               }
               disabled={generateMutation.isPending}
               className="w-full rounded-xl bg-emerald-500 py-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition flex items-center justify-center gap-2"

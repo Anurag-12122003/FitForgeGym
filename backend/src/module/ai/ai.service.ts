@@ -4,31 +4,33 @@ import { z } from 'zod';
 const aiWorkoutExerciseSchema = z.object({
   exerciseId: z.string(),
   exerciseName: z.string(),
-  targetMuscle: z.string(),
-  sets: z.number().int().min(1).max(6),
-  repsMin: z.number().int().min(1).max(30),
-  repsMax: z.number().int().min(1).max(30),
-  targetWeightKg: z.number().nonnegative(), // AI recommended working weight in kg
-  restSeconds: z.number().int().min(30).max(300),
-  coachingCue: z.string(), // Form cue tailored to biometrics
+  targetMuscle: z.string().optional().default('General'),
+  sets: z.coerce.number().int().min(1).max(6).default(3),
+  repsMin: z.coerce.number().int().min(1).max(30).default(8),
+  repsMax: z.coerce.number().int().min(1).max(30).default(12),
+  targetWeightKg: z.coerce.number().nonnegative().default(0),
+  restSeconds: z.coerce.number().int().min(30).max(300).default(90),
+  coachingCue: z.string().optional().default('Maintain steady form and control.'),
 });
 
 const aiWorkoutDaySchema = z.object({
   dayOfWeek: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
   name: z.string(),
   isRestDay: z.boolean(),
-  focus: z.string(),
-  exercises: z.array(aiWorkoutExerciseSchema),
+  focus: z.string().optional().default('Strength & Hypertrophy'),
+  exercises: z.array(aiWorkoutExerciseSchema).default([]),
 });
 
 export const aiGeneratedRoutineSchema = z.object({
-  routineName: z.string(),
-  targetGoal: z.string(),
-  reasoning: z.string(),
-  days: z.array(aiWorkoutDaySchema).length(7),
+  routineName: z.string().default('AI Personalized Split'),
+  targetGoal: z.string().default('Muscle Hypertrophy'),
+  reasoning: z.string().default('Scientific split mapped to kinetic profile.'),
+  days: z.array(aiWorkoutDaySchema),
 });
 
 export type AIGeneratedRoutine = z.infer<typeof aiGeneratedRoutineSchema>;
+
+const ALL_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
 
 export class AIService {
   public static async generateWorkout(params: {
@@ -41,104 +43,142 @@ export class AIService {
     age?: number;
     gender?: string;
   }): Promise<AIGeneratedRoutine> {
-    // 1. Fetch catalog exercises with equipment and muscles
     const catalog = await prisma.exercise.findMany({
       select: {
         id: true,
         name: true,
-        difficulty: true,
         equipment: { select: { name: true } },
         muscles: {
-          select: {
-            role: true,
-            muscle: { select: { name: true } },
-          },
+          where: { role: 'PRIMARY' },
+          select: { muscle: { select: { name: true } } },
         },
       },
-      take: 60,
+      take: 40,
     });
 
     if (catalog.length === 0) {
-      throw new Error('Database mein exercises nahi hain. Pehle seed run karein.');
+      throw new Error('Database catalog is empty. Run seed first.');
     }
 
-    const formattedCatalog = catalog.map((c) => ({
+    const compactCatalog = catalog.map((c) => ({
       id: c.id,
       name: c.name,
-      equipment: c.equipment?.name || 'Bodyweight',
-      targetMuscle: c.muscles.find((m) => m.role === 'PRIMARY')?.muscle.name || 'General',
-      difficulty: c.difficulty,
+      eq: c.equipment?.name || 'Bodyweight',
+      target: c.muscles[0]?.muscle.name || 'General',
     }));
 
     const apiKey = process.env.GROQ_API_KEY;
-
-    // Calculate BMI & Strength Baselines
-    const heightM = (params.heightCm || 175) / 100;
-    const weight = params.weightKg || 70;
+    const heightM = (params.heightCm || 170) / 100;
+    const weight = params.weightKg || 79;
     const bmi = (weight / (heightM * heightM)).toFixed(1);
+    const requestedDays = Math.min(6, Math.max(2, params.daysPerWeek));
+
+    // Determine Day Layout in deterministic code
+    const layoutMap: Record<number, { name: string; focus: string; isRest: boolean }[]> = {
+      6: [
+        { name: 'Push Day 1', focus: 'Chest, Shoulders & Triceps', isRest: false },
+        { name: 'Pull Day 1', focus: 'Back & Biceps', isRest: false },
+        { name: 'Leg Day 1', focus: 'Quads, Hamstrings & Calves', isRest: false },
+        { name: 'Push Day 2', focus: 'Chest, Shoulders & Triceps', isRest: false },
+        { name: 'Pull Day 2', focus: 'Back & Biceps', isRest: false },
+        { name: 'Leg Day 2', focus: 'Quads, Hamstrings & Calves', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Active recovery and mobility', isRest: true },
+      ],
+      5: [
+        { name: 'Push Day', focus: 'Chest, Shoulders & Triceps', isRest: false },
+        { name: 'Pull Day', focus: 'Back & Biceps', isRest: false },
+        { name: 'Leg Day', focus: 'Quads & Hamstrings', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Upper Body Focus', focus: 'Chest, Back & Arms', isRest: false },
+        { name: 'Lower Body & Core', focus: 'Legs & Core', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+      ],
+      4: [
+        { name: 'Upper Body A', focus: 'Chest, Back & Shoulders', isRest: false },
+        { name: 'Lower Body A', focus: 'Quads & Hamstrings', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Upper Body B', focus: 'Chest, Back & Arms', isRest: false },
+        { name: 'Lower Body B', focus: 'Glutes, Hamstrings & Calves', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+      ],
+      3: [
+        { name: 'Full Body A', focus: 'Compound Push & Pull', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Full Body B', focus: 'Lower Body & Core', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Full Body C', focus: 'Full Body Conditioning', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+      ],
+      2: [
+        { name: 'Upper Body', focus: 'Chest, Back & Arms', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Lower Body', focus: 'Quads, Hamstrings & Core', isRest: false },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+        { name: 'Rest & Recovery', focus: 'Rest Day', isRest: true },
+      ],
+    };
+
+    const targetLayout = layoutMap[requestedDays] || layoutMap[4];
+
+    // Pre-seed the 7-day skeleton array
+    const skeletonDays = ALL_DAYS.map((dayName, idx) => ({
+      dayOfWeek: dayName,
+      name: targetLayout[idx].name,
+      isRestDay: targetLayout[idx].isRest,
+      focus: targetLayout[idx].focus,
+    }));
 
     if (!apiKey) {
-      console.warn('⚠️ GROQ_API_KEY missing in .env. Falling back to algorithmic split.');
-      return this.generateSmartAlgorithmicSplit(params, formattedCatalog);
+      return this.generateSmartAlgorithmicSplit(params, compactCatalog, skeletonDays);
     }
 
     try {
-      console.log(`🚀 [AI Engine] Generating biometric split for ${weight}kg, ${params.heightCm}cm (BMI: ${bmi})...`);
+      console.log(`🚀 [AI Engine] Requesting exact ${requestedDays}-day routine from Groq...`);
 
-      const systemPrompt = `You are a world-class biomechanics specialist and master strength coach.
-Output ONLY valid, parseable JSON strictly matching this schema:
+      const systemPrompt = `You are a sports science coach. Output valid JSON strictly matching the provided schedule.
+You MUST fill exercises for ALL non-rest days in this schedule:
+${JSON.stringify(skeletonDays)}
+
+Output format:
 {
   "routineName": string,
   "targetGoal": string,
   "reasoning": string,
   "days": [
     {
-      "dayOfWeek": "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY",
-      "name": string,
-      "isRestDay": boolean,
-      "focus": string,
+      "dayOfWeek": "MONDAY",
+      "name": "Push Day 1",
+      "isRestDay": false,
+      "focus": "Chest, Shoulders & Triceps",
       "exercises": [
         {
           "exerciseId": string,
           "exerciseName": string,
           "targetMuscle": string,
-          "sets": number (2-5),
-          "repsMin": number (6-15),
-          "repsMax": number (8-20),
-          "targetWeightKg": number (exact starting working weight in kg, calculated rationally),
-          "restSeconds": number (45-120),
-          "coachingCue": string (concise biomechanical cue)
+          "sets": 3,
+          "repsMin": 8,
+          "repsMax": 12,
+          "targetWeightKg": number,
+          "restSeconds": 90,
+          "coachingCue": string
         }
       ]
     }
   ]
 }
 
-CRITICAL WEIGHT & BIOMETRIC PRESCRIPTION FORMULA:
-- Athlete: Weight ${weight} kg, Height ${params.heightCm} cm, BMI ${bmi}, Level ${params.experienceLevel}, Gender ${params.gender || 'MALE'}, Age ${params.age || 25}.
-- You MUST prescribe realistic starting "targetWeightKg" for EVERY exercise:
-  * Bodyweight movements (Pushups, Pullups, Crunches): targetWeightKg = 0.
-  * Dumbbell isolation (Lateral raises, curls): prescribe pair/single weight (e.g., 5 to 12.5 kg).
-  * Heavy compounds (Squats, Bench, Rows): calculate realistic fraction of bodyweight based on ${params.experienceLevel}:
-    - BEGINNER: ~0.4x to 0.6x bodyweight.
-    - INTERMEDIATE: ~0.7x to 1.1x bodyweight.
-    - ADVANCED: ~1.2x to 1.6x bodyweight.
-- DO NOT invent exercises. You MUST pick ONLY from this catalog:
-${JSON.stringify(formattedCatalog)}
-- For a session duration of ${params.durationMinutes} minutes, include exactly 3 to 5 exercises per active training day.
-- Exactly ${7 - params.daysPerWeek} days MUST have "isRestDay": true with an empty exercises array [].
-- All 7 days (MONDAY through SUNDAY) must be present.`;
+CRITICAL RULES:
+1. Every day marked with "isRestDay": false MUST have 3 to 4 populated exercises. DO NOT LEAVE ANY ACTIVE DAY EMPTY.
+2. Days marked with "isRestDay": true MUST have "exercises": [].
+3. Pick exercises ONLY from this catalog:
+${JSON.stringify(compactCatalog)}`;
 
-      const userPrompt = `
-Generate a personalized ${params.daysPerWeek}-day split for:
-- Goal: ${params.goal}
-- Experience: ${params.experienceLevel}
-- Duration per session: ${params.durationMinutes} mins
-- Bodyweight: ${weight} kg
-- Height: ${params.heightCm} cm
-- Gender: ${params.gender || 'MALE'}
-- Age: ${params.age || 25}
-Prescribe exact working weights (in kg) for each movement so the athlete knows exactly what dumbbells/barbell load to pick.`;
+      const userPrompt = `Fill the workout plan for a ${params.experienceLevel} athlete (${weight}kg, ${params.heightCm}cm, Goal: ${params.goal}).
+Prescribe realistic targetWeightKg (in kg). Return strictly raw JSON.`;
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -153,22 +193,66 @@ Prescribe exact working weights (in kg) for each movement so the athlete knows e
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          temperature: 0.2,
+          temperature: 0.1,
+          max_tokens: 4096,
         }),
       });
 
       if (!response.ok) {
         const err = await response.text();
         console.error('❌ Groq API error:', err);
-        return this.generateSmartAlgorithmicSplit(params, formattedCatalog);
+        return this.generateSmartAlgorithmicSplit(params, compactCatalog, skeletonDays);
       }
 
       const json = await response.json();
       const content = json.choices?.[0]?.message?.content;
-      if (!content) throw new Error('Empty payload from Groq');
+      if (!content) throw new Error('Empty response from Groq');
 
       const parsedData = JSON.parse(content);
       const validated = aiGeneratedRoutineSchema.parse(parsedData);
+
+      // Post-Processing: Guarantee every required active day has exercises
+      const dayMap = new Map(validated.days.map((d) => [d.dayOfWeek, d]));
+
+      const fullSevenDays = skeletonDays.map((skDay) => {
+        const generatedDay = dayMap.get(skDay.dayOfWeek);
+
+        // If LLM cheated and left an active day empty or marked it as rest:
+        if (!skDay.isRestDay && (!generatedDay || generatedDay.isRestDay || generatedDay.exercises.length === 0)) {
+          // Fallback-fill exercises for this specific active day
+          const daySlice = catalog.slice(0, 3).map((c) => ({
+            exerciseId: c.id,
+            exerciseName: c.name,
+            targetMuscle: c.muscles[0]?.muscle.name || 'General',
+            sets: 3,
+            repsMin: 8,
+            repsMax: 12,
+            targetWeightKg: Math.round((weight * 0.45) / 2.5) * 2.5,
+            restSeconds: 90,
+            coachingCue: 'Controlled cadence and focus on form.',
+          }));
+
+          return {
+            dayOfWeek: skDay.dayOfWeek,
+            name: skDay.name,
+            isRestDay: false,
+            focus: skDay.focus,
+            exercises: daySlice,
+          };
+        }
+
+        return (
+          generatedDay || {
+            dayOfWeek: skDay.dayOfWeek,
+            name: skDay.name,
+            isRestDay: skDay.isRestDay,
+            focus: skDay.focus,
+            exercises: [],
+          }
+        );
+      });
+
+      validated.days = fullSevenDays;
 
       // Validate catalog IDs to prevent hallucinations
       const validMap = new Map(catalog.map((c) => [c.id, c.name]));
@@ -184,63 +268,60 @@ Prescribe exact working weights (in kg) for each movement so the athlete knows e
 
       return validated;
     } catch (err: any) {
-      console.error('❌ [AI Generation Exception]:', err.message);
-      return this.generateSmartAlgorithmicSplit(params, formattedCatalog);
+      console.error('❌ [AI Generation Exception]:', err.message || err);
+      return this.generateSmartAlgorithmicSplit(params, compactCatalog, skeletonDays);
     }
   }
 
-  private static generateSmartAlgorithmicSplit(params: any, catalog: any[]): AIGeneratedRoutine {
-    const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
-    const bw = params.weightKg || 70;
-    const levelFactor = params.experienceLevel === 'ADVANCED' ? 1.0 : params.experienceLevel === 'INTERMEDIATE' ? 0.7 : 0.45;
+  private static generateSmartAlgorithmicSplit(params: any, catalog: any[], skeletonDays: any[]): AIGeneratedRoutine {
+    const bw = params.weightKg || 79;
+    const levelFactor = params.experienceLevel === 'ADVANCED' ? 0.9 : params.experienceLevel === 'INTERMEDIATE' ? 0.65 : 0.45;
 
-    const daysCount = Math.min(6, Math.max(2, params.daysPerWeek));
-    let tIndex = 0;
-
-    const routineDays = days.map((day, idx) => {
-      const isRest = idx === 2 || idx === 6 || tIndex >= daysCount;
-      if (isRest) {
+    let trainingIndex = 0;
+    const fullDays = skeletonDays.map((sk) => {
+      if (sk.isRestDay) {
         return {
-          dayOfWeek: day,
-          name: 'Rest & Recovery',
+          dayOfWeek: sk.dayOfWeek,
+          name: sk.name,
           isRestDay: true,
-          focus: 'Full body active restoration and mobility',
+          focus: sk.focus,
           exercises: [],
         };
       }
 
-      tIndex++;
-      const dayExercises = catalog.slice((tIndex - 1) * 3, (tIndex - 1) * 3 + 3).map((ex) => {
-        const isBw = ex.equipment?.toLowerCase().includes('bodyweight');
-        const calcWeight = isBw ? 0 : Math.round((bw * levelFactor) / 2.5) * 2.5; // nearest 2.5kg plate
+      trainingIndex++;
+      const startIdx = ((trainingIndex - 1) * 3) % Math.max(1, catalog.length - 4);
+      const exercises = catalog.slice(startIdx, startIdx + 3).map((ex) => {
+        const isBw = (ex.eq || '').toLowerCase().includes('bodyweight');
+        const calcWeight = isBw ? 0 : Math.round((bw * levelFactor) / 2.5) * 2.5;
 
         return {
           exerciseId: ex.id,
           exerciseName: ex.name,
-          targetMuscle: ex.targetMuscle,
+          targetMuscle: ex.target || 'General',
           sets: 3,
           repsMin: 8,
           repsMax: 12,
           targetWeightKg: calcWeight,
           restSeconds: 90,
-          coachingCue: 'Maintain controlled eccentric tempo of 3 seconds.',
+          coachingCue: 'Controlled tempo with strict muscular contraction.',
         };
       });
 
       return {
-        dayOfWeek: day,
-        name: `Day ${tIndex} Focus Session`,
+        dayOfWeek: sk.dayOfWeek,
+        name: sk.name,
         isRestDay: false,
-        focus: 'Compound strength and progressive tension',
-        exercises: dayExercises,
+        focus: sk.focus,
+        exercises,
       };
     });
 
     return {
-      routineName: `${params.goal} Biometric Blueprint`,
+      routineName: `Optimized ${params.daysPerWeek}-Day Split`,
       targetGoal: params.goal,
-      reasoning: `Custom strength curve calculated for ${bw}kg bodyweight using progressive plate load increments.`,
-      days: routineDays,
+      reasoning: `Structured progression programmed for ${bw}kg bodyweight.`,
+      days: fullDays,
     };
   }
 }
